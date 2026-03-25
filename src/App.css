@@ -1,0 +1,41 @@
+/* src/App.css */
+
+/* Remove qualquer comportamento de scroll ou margem do WebView do Tauri */
+:root, html, body {
+  margin: 0 !important;
+  padding: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  max-width: 100vw !important;
+  max-height: 100vh !important;
+  background-color: #050505 !important; /* Cor exata do seu fundo */
+  overflow: hidden !important; /* Bloqueia o scroll do app inteiro */
+  position: fixed; /* Impede o WebView de mover a tela */
+  
+  /* Melhora fontes no Windows/Mac Desktop */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-family: 'Inter', sans-serif;
+}
+
+#root {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+/* Scrollbar personalizada para a área de conteúdo (Agenda/Caixa) */
+::-webkit-scrollbar {
+  width: 5px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #1a1a1a;
+  border-radius: 10px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #d4af37;
+}
