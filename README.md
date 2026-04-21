@@ -202,6 +202,68 @@ npm run build
 npm run tauri -- build
 ```
 
+## Como Logar Nos 3 Ambientes (Perfis)
+
+No sistema, os 3 ambientes sao perfis de acesso diferentes dentro do mesmo app:
+
+- Dono da barbearia: role admin
+- Colaborador: role collaborator
+- Cliente: role client
+
+### 1) Subir frontend e backend juntos (modo recomendado)
+
+Use este comando para abrir o app desktop completo (React + Rust + SQLite):
+
+```bash
+npm run tauri:dev
+```
+
+Observacao: para testar login real e permissao por role, rode sempre nesse modo.
+
+No Linux com VS Code instalado via Snap, este projeto ja limpa variaveis de ambiente de GTK/Snap automaticamente no script, evitando erro:
+
+```text
+symbol lookup error ... libpthread.so.0 ... __libc_pthread_init, version GLIBC_PRIVATE
+```
+
+### 2) Criar as 3 contas na tela de login
+
+Na tela inicial de Login:
+
+1. Clique em Nao tem conta? Registre-se.
+2. Selecione o perfil:
+	- Dono -> cria conta com role admin
+	- Colaborador -> cria conta com role collaborator
+	- Cliente -> cria conta com role client
+3. Preencha nome, email, senha (e telefone se quiser) e conclua o cadastro.
+4. Repita para os 3 perfis (emails diferentes).
+
+### 3) Entrar com cada perfil
+
+Depois de cadastrar, use Entrar com o email/senha de cada conta:
+
+- Login como admin: acesso completo (clientes, vendas, sync de catalogo, fechamento de caixa).
+- Login como collaborator: foco em agenda e operacao do colaborador.
+- Login como client: foco em pagamentos e visao do cliente.
+
+### 4) Testar somente frontend (sem backend)
+
+Se quiser abrir so a interface no navegador:
+
+```bash
+npm run dev
+```
+
+Importante: nesse modo, chamadas do backend local (Tauri/Rust) nao funcionam.
+
+### 5) Build local quando houver problema de permissao no tsc
+
+Se npm run build falhar com erro de permissao no tsc, valide o TypeScript assim:
+
+```bash
+node ./node_modules/typescript/bin/tsc --noEmit
+```
+
 ## Persistencia e Dados Locais
 
 - O SQLite e criado no app_data_dir resolvido pelo Tauri.

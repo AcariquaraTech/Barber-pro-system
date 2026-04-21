@@ -13,20 +13,34 @@ pub fn run() {
         })
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
+            // Auth commands
+            commands::auth::login,
+            commands::auth::register,
+            commands::auth::verify_token,
+            commands::auth::refresh_session,
+            commands::auth::logout,
+            // Legacy commands
             commands::health,
             commands::list_barbers,
             commands::list_services,
             commands::list_clients,
+            commands::list_clients_secure,
             commands::create_client,
+            commands::create_client_secure,
             commands::update_client,
+            commands::update_client_secure,
             commands::delete_client,
+            commands::delete_client_secure,
             commands::list_appointments,
             commands::create_appointment,
             commands::update_appointment_status,
             commands::finalize_appointment,
             commands::create_sale,
             commands::list_sales,
-            commands::sync_catalog
+            commands::list_sales_secure,
+            commands::sync_catalog,
+            commands::sync_catalog_secure,
+            commands::close_cashier
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

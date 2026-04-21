@@ -4,10 +4,12 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "tsc && vite build",
-    "preview": "vite preview",
-    "tauri": "tauri"
+    "dev": "node ./node_modules/vite/bin/vite.js",
+    "build": "node ./node_modules/typescript/bin/tsc && node ./node_modules/vite/bin/vite.js build",
+    "preview": "node ./node_modules/vite/bin/vite.js preview",
+    "tauri": "env -u GTK_PATH -u GDK_PIXBUF_MODULE_FILE -u GIO_MODULE_DIR -u SNAP -u SNAP_NAME -u SNAP_REVISION node ./node_modules/@tauri-apps/cli/tauri.js",
+    "tauri:dev": "env -u GTK_PATH -u GDK_PIXBUF_MODULE_FILE -u GIO_MODULE_DIR -u SNAP -u SNAP_NAME -u SNAP_REVISION node ./node_modules/@tauri-apps/cli/tauri.js dev",
+    "tauri:build": "env -u GTK_PATH -u GDK_PIXBUF_MODULE_FILE -u GIO_MODULE_DIR -u SNAP -u SNAP_NAME -u SNAP_REVISION node ./node_modules/@tauri-apps/cli/tauri.js build"
   },
   "dependencies": {
     "@tauri-apps/api": "^2",

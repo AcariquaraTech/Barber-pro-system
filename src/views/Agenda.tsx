@@ -2,22 +2,9 @@ import { useState, useEffect, useMemo } from 'react';
 import styled, { keyframes, css } from 'styled-components';
 import { 
   User, Phone, Scissors, 
-  Clock, Check, DollarSign, Award, Target,
+  Clock, Check, DollarSign,
 } from 'lucide-react';
-import confetti from 'canvas-confetti';
 import { backendApi, type Appointment, type Barber, type Service } from '../services/backend';
-
-// --- CONFIGURAÇÃO E UTILITÁRIOS ---
-const TABELA_PRECOS: Record<string, number> = {
-  "Corte Classic": 45.00,
-  "Barba Premium": 35.00,
-  "Corte & Barba": 75.00,
-  "Limpeza de Pele": 50.00,
-  "Combo Premium": 90.00,
-  "Sobrancelha": 20.00,
-  "Corte Social": 45.00,
-  "Corte Degradê": 60.00
-};
 
 // --- ANIMAÇÕES ---
 const goldGlow = keyframes`
@@ -128,7 +115,6 @@ export const Agenda = ({ onFinalizarAtendimento }: AgendaProps) => {
   const [agendamentos, setAgendamentos] = useState<Appointment[]>([]);
   const [barbeiros, setBarbeiros] = useState<Barber[]>([]);
   const [servicos, setServicos] = useState<Service[]>([]);
-  const [metaFidelidade, setMetaFidelidade] = useState(10);
   const [dataSelecionada, setDataSelecionada] = useState(new Date());
   const [horaAtual, setHoraAtual] = useState(new Date());
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -142,7 +128,12 @@ export const Agenda = ({ onFinalizarAtendimento }: AgendaProps) => {
     "16:00", "16:30", "17:00", "17:30"
   ], []);
 
-  const toIsoDate = (date: Date) => date.toISOString().split('T')[0];
+  const toLocalIsoDate = (date: Date) => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
 
   const carregarBase = async () => {
     try {
@@ -164,7 +155,7 @@ export const Agenda = ({ onFinalizarAtendimento }: AgendaProps) => {
 
   const carregarAgendamentos = async () => {
     try {
-      const data = await backendApi.listAppointments(toIsoDate(dataSelecionada));
+      const data = await backendApi.listAppointments(toLocalIsoDate(dataSelecionada));
       setAgendamentos(data);
     } catch (error) {
       console.error('Erro ao carregar agenda:', error);
@@ -183,11 +174,6 @@ export const Agenda = ({ onFinalizarAtendimento }: AgendaProps) => {
     const timer = setInterval(() => setHoraAtual(new Date()), 30000);
     return () => clearInterval(timer);
   }, []);
-
-  const contagemVisitas = (nome?: string) => {
-    if (!nome) return 0;
-    return agendamentos.filter(a => a.client_name?.toLowerCase() === nome.toLowerCase() && a.status === 'finalizado').length;
-  };
 
   const estaTrabalhando = (escala: number[], data: Date) => escala[data.getDay()] === 1;
 
@@ -218,7 +204,7 @@ export const Agenda = ({ onFinalizarAtendimento }: AgendaProps) => {
         barber_nome: selecao.barbeiroNome,
         service_name: formData.servico,
         service_price: servicoSelecionado.price,
-        date: toIsoDate(dataSelecionada),
+        date: toLocalIsoDate(dataSelecionada),
         time: selecao.hora,
       });
 
@@ -232,24 +218,14 @@ export const Agenda = ({ onFinalizarAtendimento }: AgendaProps) => {
 
   const enviarAoCaixa = () => {
     if (!selecao) return;
-    
-    const visitas = contagemVisitas(selecao.client_name);
-    const isGratis = (visitas + 1) % metaFidelidade === 0;
-    const valorOriginal = selecao.service_price || TABELA_PRECOS[selecao.service_name] || 0;
-    const valorFinal = isGratis ? 0 : valorOriginal;
-
-    if (isGratis) {
-      confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 }, colors: ['#d4af37', '#fff'] });
-    }
 
     // Envia os dados estruturados para o CashierView
     onFinalizarAtendimento({
       barbeiro: selecao.barber_nome || selecao.barbeiroNome,
       cliente: selecao.client_name,
       servico: selecao.service_name,
-      valor: valorFinal,
+      valor: selecao.service_price || 0,
       idAgendamento: selecao.id,
-      isGratis: isGratis
     });
 
     setIsManageOpen(false);
@@ -262,29 +238,16 @@ export const Agenda = ({ onFinalizarAtendimento }: AgendaProps) => {
     <Container>
       <GlassHeader>
         <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-          <Target color="#d4af37" size={32} />
           <div>
-            <h3 style={{ margin: 0 }}>Fidelidade: {metaFidelidade} atendimentos</h3>
-            <div style={{ display: 'flex', gap: '5px', marginTop: '5px' }}>
-              {[5, 10, 15].map(v => (
-                <button 
-                  key={v} 
-                  onClick={() => setMetaFidelidade(v)} 
-                  style={{ 
-                    background: metaFidelidade === v ? '#d4af37' : '#333', 
-                    border: 'none', borderRadius: '4px', cursor: 'pointer', padding: '2px 8px',
-                    fontSize: '10px', color: metaFidelidade === v ? '#000' : '#fff' 
-                  }}
-                >
-                  {v}
-                </button>
-              ))}
+            <h3 style={{ margin: 0 }}>Agenda de Atendimentos</h3>
+            <div style={{ color: '#888', marginTop: '5px', fontSize: '0.9rem' }}>
+              Selecione uma data para visualizar e gerenciar horários.
             </div>
           </div>
         </div>
         <DateInput 
           type="date" 
-          value={dataSelecionada.toISOString().split('T')[0]} 
+          value={toLocalIsoDate(dataSelecionada)} 
           onChange={(e) => setDataSelecionada(new Date(e.target.value + 'T12:00:00'))} 
         />
       </GlassHeader>
@@ -298,7 +261,7 @@ export const Agenda = ({ onFinalizarAtendimento }: AgendaProps) => {
             </div>
             <SlotGrid>
               {horarios.map(hora => {
-                const agend = agendamentos.find(a => a.date === toIsoDate(dataSelecionada) && a.time === hora && a.barber_id === barbeiro.id);
+                const agend = agendamentos.find(a => a.date === toLocalIsoDate(dataSelecionada) && a.time === hora && a.barber_id === barbeiro.id);
                 const passou = dataSelecionada.toDateString() === hojeStr && hora < horaMinutoStr;
                 return (
                   <TimeSlot 
@@ -344,12 +307,12 @@ export const Agenda = ({ onFinalizarAtendimento }: AgendaProps) => {
 
       {isManageOpen && selecao && (
         <Overlay onClick={() => setIsManageOpen(false)}>
-          <Modal $isVip={(contagemVisitas(selecao.client_name) + 1) % metaFidelidade === 0} onClick={e => e.stopPropagation()}>
+          <Modal onClick={e => e.stopPropagation()}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
               <h2 style={{ color: '#d4af37', margin: 0 }}>
                 {selecao.status === 'finalizado' ? 'Atendimento Pago' : 'Gerenciar Horário'}
               </h2>
-              {selecao.status === 'finalizado' ? <DollarSign color="#00ff88" /> : <Award color="#d4af37" />}
+              {selecao.status === 'finalizado' ? <DollarSign color="#00ff88" /> : <Clock color="#d4af37" />}
             </div>
             
             <InfoCard>
@@ -358,7 +321,7 @@ export const Agenda = ({ onFinalizarAtendimento }: AgendaProps) => {
               <p><strong>Barbeiro:</strong> {selecao.barber_nome || selecao.barbeiroNome}</p>
               <p><strong>Status:</strong> <span style={{color: '#d4af37'}}>{selecao.status?.toUpperCase()}</span></p>
               <p style={{ color: '#d4af37', fontWeight: 'bold', fontSize: '1.1rem', marginTop: '10px' }}>
-                Valor: R$ {(selecao.service_price || TABELA_PRECOS[selecao.service_name] || 0).toFixed(2)}
+                Valor: R$ {(selecao.service_price || 0).toFixed(2)}
               </p>
             </InfoCard>
 
@@ -378,9 +341,10 @@ export const Agenda = ({ onFinalizarAtendimento }: AgendaProps) => {
                     FINALIZAR E RECEBER NO CAIXA
                   </button>
 
-                  <button onClick={() => {
-                    if(confirm("Deseja realmente cancelar?")) {
-                      setAgendamentos(agendamentos.filter(a => a.id !== selecao.id));
+                  <button onClick={async () => {
+                    if (confirm("Deseja realmente cancelar?")) {
+                      await backendApi.updateAppointmentStatus(selecao.id, 'cancelado');
+                      await carregarAgendamentos();
                       setIsManageOpen(false);
                     }
                   }} style={{ background: 'transparent', border: '1px solid #ff4d4d', color: '#ff4d4d', padding: '12px', borderRadius: '8px', cursor: 'pointer' }}>CANCELAR HORÁRIO</button>

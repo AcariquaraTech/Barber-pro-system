@@ -1,321 +1,537 @@
-import { useState, useMemo, useEffect } from 'react';
-import styled from 'styled-components';
-import { 
-  User, 
-  Scissors, 
-  CheckCircle, 
-  Hash,
-  CreditCard,
+import React, { useMemo, useState } from 'react';
+import styled, { css } from 'styled-components';
+import { useTheme } from '../context/ThemeContext';
+import {
   Banknote,
-  QrCode
+  Check,
+  CreditCard,
+  DollarSign,
+  Minus,
+  Plus,
+  RotateCcw,
+  Smartphone,
+  X,
 } from 'lucide-react';
-import { backendApi, type Barber, type Service } from '../services/backend';
+import { backendApi } from '../services/backend';
 
-// --- INTERFACE DE PROPS ---
+interface CashierTransaction {
+  id: string;
+  description: string;
+  amount: number;
+  method: 'cash' | 'credit_card' | 'debit_card' | 'pix';
+  timestamp: Date;
+  notes?: string;
+}
+
 interface CashierViewProps {
   dadosIniciais?: {
-    barbeiro: string;
-    cliente: string;
-    servico: string;
-    valor: number;
+    barbeiro?: string;
+    cliente?: string;
+    servico?: string;
+    valor?: number;
     idAgendamento?: string | number;
-    isGratis?: boolean;
   } | null;
   onSuccess?: () => void;
 }
 
-// --- ESTILOS (Mantidos conforme seu padrão) ---
-const Container = styled.div`
-  padding: 30px;
-  background: #050505;
-  min-height: 100vh;
-  color: white;
-  font-family: 'Inter', sans-serif;
-`;
-
-const POSGrid = styled.div`
+const Container = styled.div<{ $theme: any }>`
   display: grid;
-  grid-template-columns: 1fr 400px;
-  gap: 25px;
-  margin-top: 20px;
-  @media (max-width: 1100px) { grid-template-columns: 1fr; }
-`;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  padding: 24px;
+  background: ${(props) => props.$theme.colors.background};
+  color: ${(props) => props.$theme.colors.text};
+  min-height: 100vh;
 
-const Card = styled.div`
-  background: #0a0a0a;
-  border-radius: 20px;
-  border: 1px solid #1a1a1a;
-  padding: 25px;
-`;
-
-const SectionTitle = styled.h3`
-  font-size: 0.75rem;
-  color: #555;
-  font-weight: 800;
-  margin-bottom: 15px;
-  text-transform: uppercase;
-  letter-spacing: 1px;
-  display: flex;
-  align-items: center; gap: 8px;
-`;
-
-const InputWrapper = styled.div`
-  display: flex;
-  align-items: center;
-  background: #111;
-  border: 1px solid #222;
-  border-radius: 12px;
-  padding: 0 15px;
-  margin-bottom: 20px;
-  transition: 0.2s;
-  &:focus-within { border-color: #d4af37; box-shadow: 0 0 0 2px rgba(212, 175, 55, 0.1); }
-  input {
-    background: transparent; border: none; color: white;
-    padding: 15px; width: 100%; outline: none; font-size: 0.9rem;
+  @media (max-width: 1024px) {
+    grid-template-columns: 1fr;
   }
 `;
 
-const ServiceGrid = styled.div`
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+const Section = styled.div<{ $theme: any }>`
+  background: ${(props) => props.$theme.colors.secondary};
+  border-radius: ${(props) => props.$theme.borderRadius.large};
+  padding: 20px;
+  border: 1px solid ${(props) => props.$theme.colors.border}22;
+`;
+
+const Title = styled.h2<{ $theme: any }>`
+  font-size: ${(props) => props.$theme.typography.sizes.h3};
+  color: ${(props) => props.$theme.colors.text};
+  margin-bottom: 20px;
+  display: flex;
+  align-items: center;
   gap: 12px;
+
+  svg {
+    color: ${(props) => props.$theme.colors.primary};
+  }
 `;
 
-const ServiceItem = styled.button<{ $active: boolean }>`
-  background: ${props => props.$active ? 'rgba(212, 175, 55, 0.1)' : '#0d0d0d'};
-  border: 2px solid ${props => props.$active ? '#d4af37' : '#1a1a1a'};
-  color: white; padding: 20px; border-radius: 16px; cursor: pointer;
-  transition: 0.2s; text-align: left; display: flex; flex-direction: column; gap: 5px;
-  &:hover { border-color: #d4af37; }
-  strong { font-size: 1rem; color: ${props => props.$active ? '#d4af37' : 'white'}; }
-  span { font-size: 0.8rem; color: #555; font-weight: 700; }
+const InputGroup = styled.div`
+  margin-bottom: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 `;
 
-const PaymentGrid = styled.div`
-  display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-top: 10px;
+const Label = styled.label<{ $theme: any }>`
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: ${(props) => props.$theme.colors.textSecondary};
 `;
 
-const PayButton = styled.button<{ $active: boolean }>`
-  background: ${props => props.$active ? '#d4af37' : '#111'};
-  border: 1px solid ${props => props.$active ? '#d4af37' : '#222'};
-  color: ${props => props.$active ? 'black' : '#555'};
-  padding: 12px; border-radius: 10px; cursor: pointer;
-  display: flex; flex-direction: column; align-items: center; gap: 5px;
-  font-size: 0.7rem; font-weight: 800; transition: 0.2s;
+const Input = styled.input<{ $theme: any }>`
+  padding: 12px;
+  border: 2px solid ${(props) => props.$theme.colors.border}33;
+  border-radius: 8px;
+  background: ${(props) => props.$theme.colors.background};
+  color: ${(props) => props.$theme.colors.text};
+  font-size: 1rem;
+
+  &:focus {
+    outline: none;
+    border-color: ${(props) => props.$theme.colors.primary};
+    box-shadow: 0 0 0 3px ${(props) => props.$theme.colors.primary}22;
+  }
 `;
 
-const FinalizeButton = styled.button`
-  width: 100%; background: #d4af37; color: black; border: none;
-  padding: 20px; border-radius: 15px; font-weight: 900; font-size: 1rem;
-  cursor: pointer; display: flex; align-items: center; justify-content: center;
-  gap: 10px; margin-top: 25px; box-shadow: 0 10px 20px rgba(212, 175, 55, 0.15);
-  &:disabled { opacity: 0.2; cursor: not-allowed; filter: grayscale(1); }
+const TextArea = styled.textarea<{ $theme: any }>`
+  padding: 12px;
+  border: 2px solid ${(props) => props.$theme.colors.border}33;
+  border-radius: 8px;
+  background: ${(props) => props.$theme.colors.background};
+  color: ${(props) => props.$theme.colors.text};
+  font-size: 1rem;
+  font-family: inherit;
+  resize: vertical;
+  min-height: 80px;
+
+  &:focus {
+    outline: none;
+    border-color: ${(props) => props.$theme.colors.primary};
+  }
 `;
 
-export const CashierView = ({ dadosIniciais, onSuccess }: CashierViewProps) => {
-  const [barberInput, setBarberInput] = useState('');
-  const [clientName, setClientName] = useState('');
-  const [selectedService, setSelectedService] = useState<any>(null);
-  const [paymentMethod, setPaymentMethod] = useState('Pix');
-  const [services, setServices] = useState<Service[]>([]);
-  const [staff, setStaff] = useState<Barber[]>([]);
+const PaymentMethodGrid = styled.div`
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  margin-bottom: 16px;
+`;
 
-  useEffect(() => {
-    const loadBase = async () => {
-      try {
-        const [servicesData, barbersData] = await Promise.all([
-          backendApi.listServices(),
-          backendApi.listBarbers(),
-        ]);
-        setServices(servicesData);
-        setStaff(barbersData);
-      } catch (error) {
-        console.error('Falha ao carregar dados base do caixa:', error);
+const PaymentButton = styled.button<{ $active: boolean; $theme: any }>`
+  padding: 16px;
+  border: 2px solid
+    ${(props) => (props.$active ? props.$theme.colors.primary : props.$theme.colors.border)}33;
+  background: ${(props) => (props.$active ? `${props.$theme.colors.primary}22` : 'transparent')};
+  color: ${(props) => props.$theme.colors.text};
+  border-radius: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+
+  svg {
+    color: ${(props) => (props.$active ? props.$theme.colors.primary : props.$theme.colors.textSecondary)};
+  }
+
+  &:hover {
+    border-color: ${(props) => props.$theme.colors.primary};
+  }
+`;
+
+const TransactionList = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: 400px;
+  overflow-y: auto;
+`;
+
+const TransactionItem = styled.div<{ $theme: any }>`
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px;
+  background: ${(props) => props.$theme.colors.background};
+  border-radius: 8px;
+  border-left: 4px solid ${(props) => props.$theme.colors.primary};
+`;
+
+const TransactionAmount = styled.div<{ $theme: any }>`
+  font-weight: 700;
+  color: ${(props) => props.$theme.colors.primary};
+  font-size: 1.1rem;
+`;
+
+const SummaryGrid = styled.div`
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  margin: 20px 0;
+`;
+
+const SummaryCard = styled.div<{ $theme: any; $color?: string }>`
+  background: ${(props) => props.$theme.colors.background};
+  padding: 16px;
+  border-radius: 12px;
+  border: 2px solid ${(props) => props.$color || props.$theme.colors.border}33;
+  text-align: center;
+
+  > div:first-child {
+    font-size: 0.9rem;
+    color: ${(props) => props.$theme.colors.textSecondary};
+    margin-bottom: 8px;
+  }
+
+  > div:last-child {
+    font-size: 1.6rem;
+    font-weight: 700;
+    color: ${(props) => props.$color || props.$theme.colors.primary};
+  }
+`;
+
+const ActionButtons = styled.div`
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-top: 20px;
+`;
+
+const Button = styled.button<{ $theme: any; $variant?: 'primary' | 'danger' | 'secondary' }>`
+  padding: 14px 20px;
+  border: none;
+  border-radius: 8px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+
+  ${(props) =>
+    props.$variant === 'primary' && css`
+      background: ${props.$theme.colors.primary};
+      color: ${props.$theme.colors.background};
+
+      &:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 16px ${props.$theme.colors.primary}44;
       }
+    `}
+
+  ${(props) =>
+    props.$variant === 'danger' && css`
+      background: #ff4d4d;
+      color: white;
+
+      &:hover {
+        background: #e63946;
+      }
+    `}
+
+  ${(props) =>
+    props.$variant === 'secondary' && css`
+      background: ${props.$theme.colors.border}22;
+      color: ${props.$theme.colors.text};
+
+      &:hover {
+        background: ${props.$theme.colors.border}44;
+      }
+    `}
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+`;
+
+export const CashierView: React.FC<CashierViewProps> = ({ dadosIniciais, onSuccess }) => {
+  const { currentTheme } = useTheme();
+  const [transactions, setTransactions] = useState<CashierTransaction[]>(() => {
+    if (!dadosIniciais) return [];
+    return [
+      {
+        id: crypto.randomUUID(),
+        description: `${dadosIniciais.servico || 'Serviço'} - ${dadosIniciais.cliente || 'Cliente'}`,
+        amount: Number(dadosIniciais.valor || 0),
+        method: 'pix',
+        timestamp: new Date(),
+      },
+    ];
+  });
+  const [selectedMethod, setSelectedMethod] = useState<'cash' | 'credit_card' | 'debit_card' | 'pix'>('cash');
+  const [description, setDescription] = useState('');
+  const [amount, setAmount] = useState('');
+  const [notes, setNotes] = useState('');
+  const [isClosing, setIsClosing] = useState(false);
+
+  const summary = useMemo(() => {
+    const totals = {
+      cash: 0,
+      credit_card: 0,
+      debit_card: 0,
+      pix: 0,
+      total: 0,
     };
 
-    loadBase();
-  }, []);
+    transactions.forEach((t) => {
+      totals[t.method] += t.amount;
+      totals.total += t.amount;
+    });
 
-  // Sincronização robusta com a Agenda
-  useEffect(() => {
-    if (dadosIniciais) {
-      setBarberInput(dadosIniciais.barbeiro || '');
-      setClientName(dadosIniciais.cliente || '');
-      
-      // Busca o serviço mas PRIORIZA o valor enviado (importante para cortes grátis)
-      const servicoNome = dadosIniciais.servico || '';
-      const servicoEncontrado = services.find(s => 
-        s.name.toLowerCase() === servicoNome.toLowerCase()
-      );
+    return totals;
+  }, [transactions]);
 
-      if (servicoEncontrado) {
-        setSelectedService({
-          ...servicoEncontrado,
-          price: dadosIniciais.valor // Sobrescreve com o valor da agenda (pode ser 0)
-        });
-      } else {
-        setSelectedService({ 
-          id: Date.now(), 
-          name: servicoNome || 'Serviço Externo', 
-          price: dadosIniciais.valor 
-        });
-      }
+  const handleAddTransaction = (e: React.FormEvent) => {
+    e.preventDefault();
+
+    const parsedAmount = Number(amount);
+    if (!description.trim() || Number.isNaN(parsedAmount) || parsedAmount <= 0) {
+      alert('Preencha os campos corretamente.');
+      return;
     }
-  }, [dadosIniciais, services]);
 
-  // Identificação com proteção contra strings vazias
-  const identifiedBarberName = useMemo(() => {
-    if (!barberInput) return null;
-    
-    const inputClean = barberInput.toLowerCase();
-    const found = staff.find(s => 
-      s.id.toLowerCase() === inputClean || 
-      s.matricula.toLowerCase() === inputClean ||
-      s.nome.toLowerCase().includes(inputClean)
-    );
+    const newTransaction: CashierTransaction = {
+      id: crypto.randomUUID(),
+      description: description.trim(),
+      amount: parsedAmount,
+      method: selectedMethod,
+      timestamp: new Date(),
+      notes: notes.trim() || undefined,
+    };
 
-    if (found) return found.nome;
-    if (dadosIniciais && barberInput === dadosIniciais.barbeiro) return barberInput;
+    setTransactions((prev) => [...prev, newTransaction]);
+    setDescription('');
+    setAmount('');
+    setNotes('');
+  };
 
-    return null;
-  }, [barberInput, staff, dadosIniciais]);
+  const handleRemoveTransaction = (id: string) => {
+    setTransactions((prev) => prev.filter((t) => t.id !== id));
+  };
 
-  const handleFinishSale = async () => {
-    if (!selectedService || !identifiedBarberName) return;
+  const handleClear = () => {
+    if (confirm('Limpar todas as transações?')) {
+      setTransactions([]);
+    }
+  };
 
+  const handleCloseCashier = async () => {
+    if (!transactions.length) {
+      alert('Nenhuma transação registrada.');
+      return;
+    }
+
+    setIsClosing(true);
     try {
-      if (dadosIniciais?.idAgendamento) {
-        await backendApi.finalizeAppointment(String(dadosIniciais.idAgendamento), {
-          payment_method: paymentMethod,
-          amount_paid: selectedService.price,
+      const summary = await backendApi.closeCashier({
+        opening_balance: 0,
+        notes: notes.trim() || undefined,
+        transactions: transactions.map((t) => ({
+          barbeiro: dadosIniciais?.barbeiro || 'Atendimento Balcão',
+          cliente: dadosIniciais?.cliente || 'Consumidor Final',
+          servico: t.description,
+          valor: t.amount,
+          metodo: t.method,
           unidade: 'Matriz Center',
-        });
-      } else {
-        await backendApi.createSale({
-          barbeiro: identifiedBarberName,
-          cliente: clientName || 'Consumidor Final',
-          servico: selectedService.name,
-          valor: selectedService.price,
-          metodo: paymentMethod,
-          unidade: 'Matriz Center',
-        });
-      }
+        })),
+      });
 
-      alert(`✅ Venda Finalizada: R$ ${selectedService.price.toFixed(2)}`);
+      alert(`Caixa fechado com sucesso. Total: ${formatCurrency(summary.total_revenue)}`);
+      setTransactions([]);
+      onSuccess?.();
+    } catch (error: any) {
+      alert(error?.message || 'Falha ao fechar caixa.');
+    } finally {
+      setIsClosing(false);
+    }
+  };
 
-      setBarberInput('');
-      setClientName('');
-      setSelectedService(null);
-      if (onSuccess) onSuccess();
-    } catch (error) {
-      console.error('Falha ao registrar venda:', error);
-      alert('Nao foi possivel concluir a venda no backend.');
+  const formatCurrency = (value: number) =>
+    new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
+
+  const getPaymentMethodLabel = (method: string) => {
+    const labels = {
+      cash: 'Dinheiro',
+      credit_card: 'Crédito',
+      debit_card: 'Débito',
+      pix: 'Pix',
+    };
+    return labels[method as keyof typeof labels] || method;
+  };
+
+  const getPaymentMethodIcon = (method: string) => {
+    switch (method) {
+      case 'cash':
+        return <Banknote size={20} />;
+      case 'credit_card':
+      case 'debit_card':
+        return <CreditCard size={20} />;
+      case 'pix':
+        return <Smartphone size={20} />;
+      default:
+        return <DollarSign size={20} />;
     }
   };
 
   return (
-    <Container>
-      <header>
-        <h1 style={{ fontWeight: 900, fontSize: '2rem', letterSpacing: '-1px' }}>
-          CAIXA <span style={{ color: '#d4af37' }}>{dadosIniciais ? 'AGENDADO' : 'LIVRE'}</span>
-        </h1>
-        <p style={{ color: '#666', fontWeight: 700 }}>
-          {dadosIniciais ? `Finalizando atendimento de ${dadosIniciais.cliente}` : 'Venda rápida de balcão'}
-        </p>
-      </header>
+    <Container $theme={currentTheme}>
+      <Section $theme={currentTheme}>
+        <Title $theme={currentTheme}>
+          <DollarSign size={24} />
+          Registrar Transação
+        </Title>
 
-      <POSGrid>
-        <div>
-          <Card>
-            <SectionTitle><User size={16}/> Profissional e Cliente</SectionTitle>
-            <InputWrapper>
-              <Hash size={20} color={identifiedBarberName ? "#00ff88" : "#444"} />
-              <input 
-                placeholder="Matrícula ou Nome do Barbeiro..." 
-                value={barberInput}
-                onChange={(e) => setBarberInput(e.target.value)}
-              />
-              {identifiedBarberName && <CheckCircle size={20} color="#00ff88" />}
-            </InputWrapper>
+        <form onSubmit={handleAddTransaction}>
+          <InputGroup>
+            <Label $theme={currentTheme}>Descrição</Label>
+            <Input
+              $theme={currentTheme}
+              type="text"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Ex: Corte + Barba"
+            />
+          </InputGroup>
 
-            <InputWrapper>
-              <User size={20} color="#444" />
-              <input 
-                placeholder="Nome do Cliente" 
-                value={clientName}
-                onChange={(e) => setClientName(e.target.value)}
-              />
-            </InputWrapper>
+          <InputGroup>
+            <Label $theme={currentTheme}>Valor (R$)</Label>
+            <Input
+              $theme={currentTheme}
+              type="number"
+              step="0.01"
+              min="0"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              placeholder="0.00"
+            />
+          </InputGroup>
 
-            <SectionTitle style={{ marginTop: '30px' }}><Scissors size={16}/> Serviço</SectionTitle>
-            <ServiceGrid>
-              {services.map((s, idx) => (
-                <ServiceItem 
-                  key={s.id} 
-                  $active={selectedService?.name === s.name}
-                  onClick={() => setSelectedService(s)}
-                >
-                  <span>CÓD: {String(idx + 1).padStart(3, '0')}</span>
-                  <strong>{s.name}</strong>
-                  <div style={{ marginTop: '10px', fontWeight: 900 }}>R$ {Number(s.price).toFixed(2)}</div>
-                </ServiceItem>
-              ))}
-            </ServiceGrid>
-          </Card>
-        </div>
-
-        <aside>
-          <Card style={{ position: 'sticky', top: '20px', borderColor: identifiedBarberName ? '#d4af37' : '#1a1a1a' }}>
-            <SectionTitle>Resumo</SectionTitle>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '25px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: '#555' }}>Barbeiro:</span>
-                <span style={{ fontWeight: 700, color: identifiedBarberName ? '#00ff88' : '#ff4444' }}>
-                  {identifiedBarberName || 'Pendente'}
-                </span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: '#555' }}>Serviço:</span>
-                <span style={{ textAlign: 'right' }}>{selectedService?.name || '---'}</span>
-              </div>
-            </div>
-
-            <SectionTitle>Pagamento</SectionTitle>
-            <PaymentGrid>
-              {['Pix', 'Cartão', 'Dinheiro'].map(method => (
-                <PayButton 
+          <InputGroup>
+            <Label $theme={currentTheme}>Método de Pagamento</Label>
+            <PaymentMethodGrid>
+              {(['cash', 'credit_card', 'debit_card', 'pix'] as const).map((method) => (
+                <PaymentButton
                   key={method}
-                  $active={paymentMethod === method} 
-                  onClick={() => setPaymentMethod(method)}
+                  $theme={currentTheme}
+                  $active={selectedMethod === method}
+                  onClick={() => setSelectedMethod(method)}
+                  type="button"
                 >
-                  {method === 'Pix' && <QrCode size={18} />}
-                  {method === 'Cartão' && <CreditCard size={18} />}
-                  {method === 'Dinheiro' && <Banknote size={18} />}
-                  {method.toUpperCase()}
-                </PayButton>
+                  {getPaymentMethodIcon(method)}
+                  {getPaymentMethodLabel(method)}
+                </PaymentButton>
               ))}
-            </PaymentGrid>
+            </PaymentMethodGrid>
+          </InputGroup>
 
-            <div style={{ background: '#050505', padding: '20px', borderRadius: '15px', marginTop: '25px', textAlign: 'center', border: '1px solid #1a1a1a' }}>
-              <span style={{ color: '#555', fontSize: '0.7rem', fontWeight: 800 }}>VALOR TOTAL</span>
-              <div style={{ fontSize: '2.2rem', fontWeight: 900, color: '#d4af37' }}>
-                R$ {selectedService?.price?.toFixed(2) || '0,00'}
-              </div>
-              {selectedService?.price === 0 && (
-                <div style={{ color: '#00ff88', fontSize: '0.7rem', fontWeight: 800 }}>FIDELIDADE ATIVA (GRÁTIS)</div>
-              )}
-            </div>
+          <InputGroup>
+            <Label $theme={currentTheme}>Observações</Label>
+            <TextArea
+              $theme={currentTheme}
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="Observações opcionais"
+            />
+          </InputGroup>
 
-            <FinalizeButton 
-              disabled={!selectedService || !identifiedBarberName}
-              onClick={handleFinishSale}
-            >
-              <CheckCircle size={20} /> CONCLUIR VENDA
-            </FinalizeButton>
-          </Card>
-        </aside>
-      </POSGrid>
+          <Button $theme={currentTheme} $variant="primary" type="submit">
+            <Plus size={18} />
+            Adicionar
+          </Button>
+        </form>
+
+        <ActionButtons>
+          <Button $theme={currentTheme} $variant="secondary" onClick={handleClear}>
+            <RotateCcw size={18} />
+            Limpar
+          </Button>
+          <Button $theme={currentTheme} $variant="danger" onClick={() => alert('Em breve')}>
+            <Minus size={18} />
+            Devolução
+          </Button>
+        </ActionButtons>
+      </Section>
+
+      <Section $theme={currentTheme}>
+        <Title $theme={currentTheme}>
+          <Check size={24} />
+          Resumo do Caixa
+        </Title>
+
+        <SummaryGrid>
+          <SummaryCard $theme={currentTheme} $color="#4CAF50">
+            <div>Dinheiro</div>
+            <div>{formatCurrency(summary.cash)}</div>
+          </SummaryCard>
+          <SummaryCard $theme={currentTheme} $color="#2196F3">
+            <div>Crédito</div>
+            <div>{formatCurrency(summary.credit_card)}</div>
+          </SummaryCard>
+          <SummaryCard $theme={currentTheme} $color="#FF9800">
+            <div>Débito</div>
+            <div>{formatCurrency(summary.debit_card)}</div>
+          </SummaryCard>
+          <SummaryCard $theme={currentTheme} $color="#9C27B0">
+            <div>Pix</div>
+            <div>{formatCurrency(summary.pix)}</div>
+          </SummaryCard>
+        </SummaryGrid>
+
+        <SummaryCard $theme={currentTheme}>
+          <div>Total</div>
+          <div style={{ fontSize: '2rem' }}>{formatCurrency(summary.total)}</div>
+        </SummaryCard>
+
+        <Title $theme={currentTheme} style={{ marginTop: '30px' }}>
+          Transações
+        </Title>
+
+        {transactions.length === 0 ? (
+          <p style={{ color: currentTheme.colors.textSecondary, textAlign: 'center', padding: '20px' }}>
+            Nenhuma transação registrada.
+          </p>
+        ) : (
+          <TransactionList>
+            {transactions.map((t) => (
+              <TransactionItem key={t.id} $theme={currentTheme}>
+                <div>
+                  <div style={{ fontWeight: 600 }}>{t.description}</div>
+                  <div style={{ fontSize: '0.85rem', color: currentTheme.colors.textSecondary }}>
+                    {getPaymentMethodLabel(t.method)}
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                  <TransactionAmount $theme={currentTheme}>{formatCurrency(t.amount)}</TransactionAmount>
+                  <button
+                    onClick={() => handleRemoveTransaction(t.id)}
+                    style={{ background: 'none', border: 'none', color: '#ff4d4d', cursor: 'pointer', padding: '4px' }}
+                  >
+                    <X size={18} />
+                  </button>
+                </div>
+              </TransactionItem>
+            ))}
+          </TransactionList>
+        )}
+
+        <Button
+          $theme={currentTheme}
+          $variant="primary"
+          onClick={handleCloseCashier}
+          disabled={isClosing || !transactions.length}
+          style={{ width: '100%', marginTop: '20px' }}
+        >
+          <Check size={18} />
+          {isClosing ? 'Processando...' : 'Fechar Caixa'}
+        </Button>
+      </Section>
     </Container>
   );
 };

@@ -1,9 +1,11 @@
 use crate::backend::{
+    commands::auth,
     db,
     models::{
         Appointment, Barber, Client, ConfigBarberInput, ConfigServiceInput, CreateAppointmentRequest,
         CreateClientRequest, CreateSaleRequest, FinalizeAppointmentRequest, HealthResponse, SaleRecord,
         Service, SyncCatalogRequest, UpdateAppointmentStatusRequest, UpdateClientRequest,
+        CloseCashierRequest, CashierSummary,
     },
     AppState,
 };
@@ -130,6 +132,16 @@ pub fn list_clients(state: tauri::State<AppState>, search: Option<String>) -> Re
 }
 
 #[tauri::command]
+pub fn list_clients_secure(
+    state: tauri::State<AppState>,
+    token: String,
+    search: Option<String>,
+) -> Result<Vec<Client>, String> {
+    auth::require_roles(&token, &["admin"])?;
+    list_clients(state, search)
+}
+
+#[tauri::command]
 pub fn create_client(
     state: tauri::State<AppState>,
     payload: CreateClientRequest,
@@ -158,6 +170,16 @@ pub fn create_client(
 }
 
 #[tauri::command]
+pub fn create_client_secure(
+    state: tauri::State<AppState>,
+    token: String,
+    payload: CreateClientRequest,
+) -> Result<Client, String> {
+    auth::require_roles(&token, &["admin"])?;
+    create_client(state, payload)
+}
+
+#[tauri::command]
 pub fn update_client(
     state: tauri::State<AppState>,
     id: String,
@@ -183,6 +205,17 @@ pub fn update_client(
 }
 
 #[tauri::command]
+pub fn update_client_secure(
+    state: tauri::State<AppState>,
+    token: String,
+    id: String,
+    payload: UpdateClientRequest,
+) -> Result<Client, String> {
+    auth::require_roles(&token, &["admin"])?;
+    update_client(state, id, payload)
+}
+
+#[tauri::command]
 pub fn delete_client(state: tauri::State<AppState>, id: String) -> Result<bool, String> {
     let conn = db::open_connection(&state.db_path)?;
     let affected = conn
@@ -190,6 +223,12 @@ pub fn delete_client(state: tauri::State<AppState>, id: String) -> Result<bool, 
         .map_err(|e| format!("erro ao deletar cliente: {e}"))?;
 
     Ok(affected > 0)
+}
+
+#[tauri::command]
+pub fn delete_client_secure(state: tauri::State<AppState>, token: String, id: String) -> Result<bool, String> {
+    auth::require_roles(&token, &["admin"])?;
+    delete_client(state, id)
 }
 
 #[tauri::command]
@@ -491,6 +530,17 @@ pub fn list_sales(
 }
 
 #[tauri::command]
+pub fn list_sales_secure(
+    state: tauri::State<AppState>,
+    token: String,
+    start_timestamp: Option<String>,
+    end_timestamp: Option<String>,
+) -> Result<Vec<SaleRecord>, String> {
+    auth::require_roles(&token, &["admin"])?;
+    list_sales(state, start_timestamp, end_timestamp)
+}
+
+#[tauri::command]
 pub fn sync_catalog(state: tauri::State<AppState>, payload: SyncCatalogRequest) -> Result<bool, String> {
     let conn = db::open_connection(&state.db_path)?;
     let tx = conn
@@ -560,6 +610,119 @@ pub fn sync_catalog(state: tauri::State<AppState>, payload: SyncCatalogRequest) 
         .map_err(|e| format!("erro ao finalizar transacao de catalogo: {e}"))?;
 
     Ok(true)
+}
+
+#[tauri::command]
+pub fn sync_catalog_secure(
+    state: tauri::State<AppState>,
+    token: String,
+    payload: SyncCatalogRequest,
+) -> Result<bool, String> {
+    auth::require_roles(&token, &["admin"])?;
+    sync_catalog(state, payload)
+}
+
+#[tauri::command]
+pub fn close_cashier(
+    state: tauri::State<AppState>,
+    token: String,
+    payload: CloseCashierRequest,
+) -> Result<CashierSummary, String> {
+    let (admin_id, _role) = auth::require_roles(&token, &["admin"])?;
+    let conn = db::open_connection(&state.db_path)?;
+    let tx = conn
+        .unchecked_transaction()
+        .map_err(|e| format!("erro ao iniciar transacao do fechamento: {e}"))?;
+
+    let mut total_cash = 0.0;
+    let mut total_card = 0.0;
+    let mut total_pix = 0.0;
+
+    let now = Local::now();
+    let timestamp = now.to_rfc3339();
+    let data = now.format("%d/%m/%Y").to_string();
+    let hora = now.format("%H:%M").to_string();
+
+    for t in &payload.transactions {
+        if t.servico.trim().is_empty() || t.barbeiro.trim().is_empty() {
+            return Err("Transação inválida: serviço e barbeiro são obrigatórios".to_string());
+        }
+        if t.valor < 0.0 {
+            return Err("Transação inválida: valor negativo".to_string());
+        }
+
+        match t.metodo.as_str() {
+            "cash" => total_cash += t.valor,
+            "credit_card" | "debit_card" => total_card += t.valor,
+            "pix" => total_pix += t.valor,
+            _ => return Err("Método de pagamento inválido".to_string()),
+        }
+
+        tx.execute(
+            "
+            INSERT INTO sales (
+                id, appointment_id, barbeiro, cliente, servico, valor,
+                metodo, unidade, data, hora, timestamp
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
+            ",
+            params![
+                Uuid::new_v4().to_string(),
+                Option::<String>::None,
+                t.barbeiro.trim(),
+                if t.cliente.trim().is_empty() {
+                    "Consumidor Final"
+                } else {
+                    t.cliente.trim()
+                },
+                t.servico.trim(),
+                t.valor,
+                t.metodo.trim(),
+                t.unidade.clone().unwrap_or_else(|| "Matriz Center".to_string()),
+                data,
+                hora,
+                timestamp
+            ],
+        )
+        .map_err(|e| format!("erro ao inserir venda no fechamento: {e}"))?;
+    }
+
+    let total_revenue = total_cash + total_card + total_pix;
+    let closing_id = Uuid::new_v4().to_string();
+
+    tx.execute(
+        "
+        INSERT INTO cashier_closings (
+            id, admin_id, opened_at, closed_at, opening_balance,
+            total_cash, total_card, total_pix, total_revenue,
+            discrepancy, notes, is_closed
+        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, 0, ?10, 1)
+        ",
+        params![
+            &closing_id,
+            &admin_id,
+            &timestamp,
+            &timestamp,
+            payload.opening_balance,
+            total_cash,
+            total_card,
+            total_pix,
+            total_revenue,
+            payload.notes.clone().unwrap_or_default()
+        ],
+    )
+    .map_err(|e| format!("erro ao salvar fechamento de caixa: {e}"))?;
+
+    tx.commit()
+        .map_err(|e| format!("erro ao confirmar fechamento de caixa: {e}"))?;
+
+    Ok(CashierSummary {
+        closing_id,
+        total_cash,
+        total_card,
+        total_pix,
+        total_revenue,
+        transaction_count: payload.transactions.len(),
+    })
 }
 
 fn map_sale_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<SaleRecord> {
