@@ -1,0 +1,2 @@
+ if [[ ! -f ~/.ssh/id_ed25519_cpo ]]; then ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519_cpo -C 'FernandoFreitas-CPO' -N ''; fi && ls -la ~/.ssh/id_ed25519_cpo*
+

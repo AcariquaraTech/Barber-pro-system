@@ -3,8 +3,9 @@ import styled from 'styled-components';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import { UserRole } from '../@types/auth';
-import { LogIn, UserPlus } from 'lucide-react';
+import { LogIn, UserPlus, Zap } from 'lucide-react';
 import { ThemeName } from '../themes';
+import { isTestModeEnabled } from '../utils/testLogin';
 
 interface LoginViewProps {
   onLoginSuccess?: () => void;
@@ -173,9 +174,39 @@ const ErrorMsg = styled.div`
   font-size: 0.9rem;
 `;
 
+const TestModeButton = styled.button<{ $primary: string }>`
+  width: 100%;
+  padding: 12px;
+  background: linear-gradient(135deg, ${props => props.$primary}, ${props => props.$primary}99);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-weight: 700;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 10px;
+  opacity: 0.8;
+
+  &:hover {
+    opacity: 1;
+    transform: translateY(-2px);
+    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.15);
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+`;
+
 export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
   const { currentTheme } = useTheme();
-  const { login, register, isLoading, error } = useAuth();
+  const { login, register, testLogin, isLoading, error } = useAuth();
   const [isRegisterMode, setIsRegisterMode] = useState(false);
   const [role, setRole] = useState<UserRole>('client');
   const [formData, setFormData] = useState({
@@ -188,6 +219,15 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleTestModeLogin = async (testRole: UserRole) => {
+    try {
+      await testLogin(testRole);
+      onLoginSuccess?.();
+    } catch {
+      // Erro é gerenciado pelo contexto
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -346,6 +386,22 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
             >
               {isRegisterMode ? 'Já tem conta? Faça login' : 'Não tem conta? Registre-se'}
             </ToggleButton>
+
+            {isTestModeEnabled() && !isRegisterMode && (
+              <>
+                <div style={{ marginTop: '20px', textAlign: 'center', fontSize: '0.8rem', color: '#999', paddingBottom: '10px' }}>
+                  ⚡ MODO DE TESTES ATIVADO
+                </div>
+                <TestModeButton
+                  type="button"
+                  $primary={currentTheme.colors.primary}
+                  onClick={() => handleTestModeLogin(role)}
+                  disabled={isLoading}
+                >
+                  <Zap size={18} /> Entrar em Modo de Testes
+                </TestModeButton>
+              </>
+            )}
           </form>
         </FormSection>
       </Card>

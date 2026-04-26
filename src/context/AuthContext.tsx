@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { AuthUser, LoginPayload, RegisterPayload, UserRole, ROLE_PERMISSIONS, PermissionSet } from '../@types/auth';
 import { backendApi } from '../services/backend';
+import { testLogin as generateTestLogin } from '../utils/testLogin';
 
 interface AuthContextType {
   user: AuthUser | null;
@@ -10,6 +11,7 @@ interface AuthContextType {
   login: (payload: LoginPayload) => Promise<void>;
   register: (payload: RegisterPayload) => Promise<void>;
   logout: () => void;
+  testLogin: (role: UserRole) => Promise<void>;
   hasPermission: (action: string, resource: string) => boolean;
   canAccess: (roles: UserRole[]) => boolean;
 }
@@ -134,6 +136,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setError(null);
   };
 
+  const testLogin = async (role: UserRole) => {
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const testUser = generateTestLogin({ role });
+      setUser(testUser);
+      localStorage.setItem('auth_user', JSON.stringify(testUser));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro ao fazer login em modo de testes');
+      throw err;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const hasPermission = (action: string, resource: string): boolean => {
     if (!user) return false;
     const permissions = ROLE_PERMISSIONS[user.role];
@@ -162,6 +180,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         login,
         register,
         logout,
+        testLogin,
         hasPermission,
         canAccess,
       }}

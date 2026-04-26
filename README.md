@@ -256,13 +256,105 @@ npm run dev
 
 Importante: nesse modo, chamadas do backend local (Tauri/Rust) nao funcionam.
 
-### 5) Build local quando houver problema de permissao no tsc
+### 5) ⚡ Modo de Testes - Login Sem Senha
+
+Para acelerar testes durante a fase de desenvolvimento, o app suporta **login sem credenciais**.
+
+#### Habilitar Modo de Testes
+
+1. Abra o arquivo `.env` na raiz do projeto:
+
+```bash
+VITE_TEST_MODE=true
+```
+
+2. Reinicie a aplicacao:
+
+```bash
+npm run tauri:dev
+```
+
+3. Na tela de Login, agora aparecerá o botão **"⚡ Entrar em Modo de Testes"**
+
+#### Como Usar
+
+1. Selecione o perfil desejado:
+   - 👔 **Dono** - acesso admin (clientes, vendas, fechamento)
+   - ✂️ **Colaborador** - acesso de barbeiro (agenda, servicos)
+   - 👤 **Cliente** - acesso de cliente (perfil)
+
+2. Clique em **"Entrar em Modo de Testes"**
+
+3. Acesso instantâneo sem pedir senha (apenas durante testes!)
+
+#### ⚠️ Observações Importantes
+
+- Modo de testes gera um **JWT mock local** que nao é validado pelo backend
+- Use **APENAS durante fase de testes** - desabilite em producao
+- Sessao de teste tem duração de **7 dias**
+- Permissoes sao aplicadas normalmente (cada role tem acesso restrito)
+
+#### Desabilitar Modo de Testes
+
+Para produção, altere no `.env`:
+
+```bash
+VITE_TEST_MODE=false
+```
+
+### 6) Build local quando houver problema de permissao no tsc
+
 
 Se npm run build falhar com erro de permissao no tsc, valide o TypeScript assim:
 
 ```bash
 node ./node_modules/typescript/bin/tsc --noEmit
 ```
+
+## 🪟 Build Multiplataforma
+
+O app foi construído com **Tauri 2**, que suporta múltiplas plataformas.
+
+### Plataformas Suportadas
+
+- ✅ **Linux** (AppImage, .deb)
+- ✅ **Windows** (exe, MSI)
+- ✅ **macOS** (app, DMG - requer macOS)
+
+### Build para Windows
+
+**Pré-requisitos:**
+- Node.js 18+
+- Rust
+- Microsoft C++ Build Tools
+- WebView2 Runtime
+
+**Comando:**
+
+```bash
+npm run tauri:build
+```
+
+Gera em: `src-tauri/target/release/barber-pro-system.exe`
+
+**Guia detalhado:** Ver arquivo [WINDOWS_BUILD.md](./WINDOWS_BUILD.md)
+
+### Build para Linux
+
+```bash
+npm run tauri:build
+```
+
+Gera em: `src-tauri/target/release/bundle/appimage/`
+
+### Build para macOS
+
+```bash
+# Requer estar em um Mac
+npm run tauri:build
+```
+
+Gera em: `src-tauri/target/release/bundle/macos/`
 
 ## Persistencia e Dados Locais
 
